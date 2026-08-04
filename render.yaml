@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: yok-veri-tabani-ayiklayici
+    env: python
+    buildCommand: ./build.sh
+    startCommand: gunicorn --chdir backend yok_backend.wsgi:application
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
