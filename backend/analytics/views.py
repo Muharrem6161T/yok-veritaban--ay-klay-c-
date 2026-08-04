@@ -1,0 +1,174 @@
+import os
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from django.db.models import Q
+from analytics.models import University, Program, QuotaRecord
+from analytics.serializers import ProgramSerializer, UniversitySerializer
+from analytics.services.ml_engine import predict_program_ranking_2026, predict_program_future, get_dashboard_analytics
+from analytics.services.ingestion import ingest_excel_file
+
+class ProgramListView(APIView):
+    """
+    Kapsamlı arama, çoklu seçim, sıralama aralığı ve durum filtreli Program Listesi Uç Noktası.
+    """
+    def get(self, request):
+        queryset = Program.objects.select_related('university').prefetch_related('quota_records').all()
+
+        search = request.GET.get('search', '').strip()
+        exact_match = request.GET.get('exact', 'false').lower() == 'true'
+
+        if search:
+            if exact_match:
+                queryset = queryset.filter(
+                    Q(clean_name__iexact=search) | Q(name__iexact=search)
+                )
+            else:
+                queryset = queryset.filter(
+                    Q(name__icontains=search) | Q(clean_name__icontains=search)
+                )
+
+        cities = request.GET.get('cities', '')
+        if cities and cities != 'Tümü':
+            city_list = [c.strip() for c in cities.split(',') if c.strip() and c.strip() != 'Tümü']
+            if city_list:
+                queryset = queryset.filter(university__city__in=city_list)
+
+        uni_types = request.GET.get('uni_types', '')
+        if uni_types and uni_types != 'Tümü':
+            type_list = [t.strip() for t in uni_types.split(',') if t.strip() and t.strip() != 'Tümü']
+            if type_list:
+                queryset = queryset.filter(university__uni_type__in=type_list)
+
+        score_types = request.GET.get('score_types', '')
+        if score_types and score_types != 'Tümü':
+            puan_list = [p.strip().upper() for p in score_types.split(',') if p.strip() and p.strip() != 'Tümü']
+            if puan_list:
+                queryset = queryset.filter(score_type__in=puan_list)
+
+        degrees = request.GET.get('degrees', '')
+        if degrees and degrees != 'Tümü':
+            deg_list = [d.strip() for d in degrees.split(',') if d.strip() and d.strip() != 'Tümü']
+            if deg_list:
+                queryset = queryset.filter(degree__in=deg_list)
+
+        # Ranking Range Filter (e.g. 50.000 - 100.000)
+        min_rank = request.GET.get('min_rank', '').strip()
+        max_rank = request.GET.get('max_rank', '').strip()
+
+        if min_rank or max_rank:
+            rank_q = Q(quota_records__year=2025, quota_records__min_ranking__gt=0)
+            if min_rank and min_rank.isdigit():
+                rank_q &= Q(quota_records__min_ranking__gte=int(min_rank))
+            if max_rank and max_rank.isdigit():
+                rank_q &= Q(quota_records__min_ranking__lte=int(max_rank))
+            queryset = queryset.filter(rank_q)
+
+        limit = int(request.GET.get('limit', 500))
+        results = queryset[:limit]
+
+        serializer = ProgramSerializer(results, many=True)
+        return Response({
+            "count": queryset.count(),
+            "results": serializer.data
+        })
+
+
+class RankingForecastListView(APIView):
+    """
+    2026 YKS Sıralama Tahminleri Listesi Uç Noktası.
+    """
+    def get(self, request):
+        queryset = Program.objects.select_related('university').prefetch_related('quota_records').all()
+
+        search = request.GET.get('search', '').strip()
+        exact_match = request.GET.get('exact', 'false').lower() == 'true'
+
+        if search:
+            if exact_match:
+                queryset = queryset.filter(
+                    Q(clean_name__iexact=search) | Q(name__iexact=search)
+                )
+            else:
+                queryset = queryset.filter(
+                    Q(name__icontains=search) | Q(clean_name__icontains=search)
+                )
+
+        score_types = request.GET.get('score_types', '')
+        if score_types and score_types != 'Tümü':
+            puan_list = [p.strip().upper() for p in score_types.split(',') if p.strip() and p.strip() != 'Tümü']
+            if puan_list:
+                queryset = queryset.filter(score_type__in=puan_list)
+
+        limit = int(request.GET.get('limit', 300))
+        programs = queryset[:limit]
+
+        results = []
+        for p in programs:
+            pred = predict_program_ranking_2026(p.id)
+            if pred:
+                results.append(pred)
+
+        return Response({
+            "count": len(results),
+            "results": results
+        })
+
+
+class DashboardAnalyticsView(APIView):
+    """
+    Dashboard Metrikleri Uç Noktası.
+    """
+    def get(self, request):
+        data = get_dashboard_analytics()
+        return Response(data)
+
+
+class ProgramPredictView(APIView):
+    """
+    Program Detayı Uç Noktası.
+    """
+    def get(self, request, program_id):
+        try:
+            program = Program.objects.select_related('university').prefetch_related('quota_records').get(pk=program_id)
+        except Program.DoesNotExist:
+            return Response({"error": "Program bulunamadı."}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = ProgramSerializer(program)
+        prediction = predict_program_future(program.id)
+
+        return Response({
+            "program": serializer.data,
+            "prediction": prediction
+        })
+
+
+class IngestExcelView(APIView):
+    """
+    Manuel Excel Yükleme Uç Noktası.
+    """
+    def post(self, request):
+        file_obj = request.FILES.get('file')
+        year = int(request.data.get('year', 2026))
+
+        if not file_obj:
+            return Response({"error": "Dosya yüklenmedi."}, status=status.HTTP_400_BAD_REQUEST)
+
+        temp_path = f"temp_{file_obj.name}"
+        with open(temp_path, 'wb+') as destination:
+            for chunk in file_obj.chunks():
+                destination.write(chunk)
+
+        try:
+            created_count, updated_count = ingest_excel_file(temp_path, year)
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            return Response({
+                "message": "İçe aktarma tamamlandı.",
+                "created_count": created_count,
+                "updated_count": updated_count
+            })
+        except Exception as e:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

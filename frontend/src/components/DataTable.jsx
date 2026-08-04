@@ -1,0 +1,450 @@
+import React, { useState, useEffect } from 'react';
+import { Search, Download, XCircle, Sparkles, SlidersHorizontal } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import axios from 'axios';
+import MultiSelectDropdown from './MultiSelectDropdown';
+
+// Comprehensive Turkish Cities List
+const CITIES_LIST = [
+  'ADANA', 'ADIYAMAN', 'AFYONKARAHİSAR', 'AĞRI', 'AKSARAY', 'AMASYA', 'ANKARA', 'ANTALYA', 'ARDAHAN', 'ARTVİN',
+  'AYDIN', 'BALIKESİR', 'BARTIN', 'BATMAN', 'BAYBURT', 'BİLECİK', 'BİNGÖL', 'BİTLİS', 'BOLU', 'BURDUR',
+  'BURSA', 'ÇANAKKALE', 'ÇANKIRI', 'ÇORUM', 'DENİZLİ', 'DİYARBAKIR', 'DÜZCE', 'EDİRNE', 'ELAZIĞ', 'ERZİNCAN',
+  'ERZURUM', 'ESKİŞEHİR', 'GAZİANTEP', 'GİRESUN', 'GÜMÜŞHANE', 'HAKKARİ', 'HATAY', 'IĞDIR', 'ISPARTA', 'İSTANBUL',
+  'İZMİR', 'KAHRAMANMARAŞ', 'KARABÜK', 'KARAMAN', 'KARS', 'KASTAMONU', 'KAYSERİ', 'KIRIKKALE', 'KIRKLARELİ', 'KIRŞEHİR',
+  'KİLİS', 'KOCAELİ', 'KONYA', 'KÜTAHYA', 'MALATYA', 'MANİSA', 'MARDİN', 'MERSİN', 'MUĞLA', 'MUŞ',
+  'NEVŞEHİR', 'NİĞDE', 'ORDU', 'OSMANİYE', 'RİZE', 'SAKARYA', 'SAMSUN', 'SİİRT', 'SİNOP', 'SİVAS',
+  'ŞANLIURFA', 'ŞIRNAK', 'TEKİRDAĞ', 'TOKAT', 'TRABZON', 'TUNCELİ', 'UŞAK', 'VAN', 'YALOVA', 'YOZGAT', 'ZONGULDAK'
+];
+
+export default function DataTable() {
+  const [programs, setPrograms] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState('');
+  const [exactMatch, setExactMatch] = useState(false);
+  
+  // Multi-select State Arrays
+  const [selectedCities, setSelectedCities] = useState([]);
+  const [selectedUniTypes, setSelectedUniTypes] = useState([]);
+  const [selectedScoreTypes, setSelectedScoreTypes] = useState([]);
+  const [selectedDegrees, setSelectedDegrees] = useState([]);
+  const [selectedStatuses, setSelectedStatuses] = useState([]);
+
+  // Ranking Range Filter State (e.g. 50.000 - 100.000)
+  const [minRank, setMinRank] = useState('');
+  const [maxRank, setMaxRank] = useState('');
+
+  const fetchPrograms = async () => {
+    setLoading(true);
+    try {
+      const params = {
+        search,
+        exact: exactMatch,
+        cities: selectedCities.join(','),
+        uni_types: selectedUniTypes.join(','),
+        score_types: selectedScoreTypes.join(','),
+        degrees: selectedDegrees.join(','),
+        min_rank: minRank,
+        max_rank: maxRank,
+        limit: 500
+      };
+      const res = await axios.get('/api/programs/', { params });
+      setPrograms(res.data.results || []);
+    } catch (err) {
+      console.error('Error fetching programs:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchPrograms();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search, exactMatch, selectedCities, selectedUniTypes, selectedScoreTypes, selectedDegrees, selectedStatuses, minRank, maxRank]);
+
+  const handleQuickSearch = (keyword) => {
+    setSearch(keyword);
+  };
+
+  const handleRankPreset = (minVal, maxVal) => {
+    setMinRank(minVal ? String(minVal) : '');
+    setMaxRank(maxVal ? String(maxVal) : '');
+  };
+
+  const clearRankFilter = () => {
+    setMinRank('');
+    setMaxRank('');
+  };
+
+  // Client-side filter for status
+  const filteredPrograms = programs.filter(p => {
+    if (selectedStatuses.length === 0) return true;
+
+    const r2025 = p.quota_records.find(r => r.year === 2025);
+    const r2026 = p.quota_records.find(r => r.year === 2026);
+    
+    const k25 = r2025 ? r2025.total_quota : 0;
+    const k26 = r2026 ? r2026.total_quota : 0;
+
+    const isClosed = k25 > 0 && k26 === 0;
+    const isNew = k25 === 0 && k26 > 0;
+    const isActive = !isClosed;
+
+    let match = false;
+    if (selectedStatuses.includes('Kapatılanlar Hariç') && isActive) match = true;
+    if (selectedStatuses.includes('Sadece Kapatılanlar (-100%)') && isClosed) match = true;
+    if (selectedStatuses.includes('Sadece Yeni Açılanlar (+100%)') && isNew) match = true;
+
+    return match;
+  });
+
+  const total2025 = filteredPrograms.reduce((acc, p) => {
+    const r = p.quota_records.find(q => q.year === 2025);
+    return acc + (r ? r.total_quota : 0);
+  }, 0);
+
+  const total2026 = filteredPrograms.reduce((acc, p) => {
+    const r = p.quota_records.find(q => q.year === 2026);
+    return acc + (r ? r.total_quota : 0);
+  }, 0);
+
+  const netDiff = total2026 - total2025;
+
+  const exportExcel = () => {
+    const excelData = filteredPrograms.map(p => {
+      const r25 = p.quota_records.find(r => r.year === 2025);
+      const r26 = p.quota_records.find(r => r.year === 2026);
+      const k25 = r25 ? r25.total_quota : 0;
+      const k26 = r26 ? r26.total_quota : 0;
+      const rank25 = r25 && r25.min_ranking ? r25.min_ranking : 'Dolmadı / Yok';
+      const diff = k26 - k25;
+      
+      let statusStr = '%0';
+      if (k25 > 0 && k26 === 0) statusStr = '-100% (Kapatıldı)';
+      else if (k25 === 0 && k26 > 0) statusStr = '+100% (Yeni Açıldı)';
+      else if (k25 > 0) statusStr = `${((diff / k25) * 100).toFixed(1)}%`;
+
+      return {
+        'Üniversite Adı': p.university_name,
+        'Üniversite Türü': p.university_type,
+        'Şehir': p.city,
+        'Program / Bölüm Adı': p.name,
+        'Puan Türü': p.score_type,
+        '2025 Son Yerleşen Sıralaması': rank25,
+        '2025 Kontenjan': k25,
+        '2026 Kontenjan': k26,
+        'Net Değişim': diff,
+        'Değişim Status': statusStr
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(excelData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Kontenjan Analizi');
+    XLSX.writeFile(workbook, 'YOK_Kontenjan_Siralama_Raporu.xlsx');
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Search & Multi-Select Filter Header Panel */}
+      <div className="premium-card p-6 rounded-3xl space-y-5 bg-white border border-slate-200 shadow-sm">
+        {/* Main Search Row */}
+        <div className="flex flex-col lg:flex-row items-center justify-between gap-4">
+          <div className="relative flex-1 w-full">
+            <Search className="absolute left-4 top-3.5 w-5 h-5 text-blue-600" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Bölüm veya program adı arayın (Örn: Yazılım, Tıp, Mimarlık, Hukuk, Hemşirelik...)"
+              className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-12 pr-10 py-3 text-sm font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-blue-600 focus:ring-4 focus:ring-blue-500/10 transition-all shadow-inner"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                className="absolute right-3.5 top-3.5 text-slate-400 hover:text-slate-700"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            )}
+          </div>
+
+          {/* Exact Match Checkbox Button */}
+          <label className={`flex items-center gap-2.5 px-4 py-3 rounded-2xl border cursor-pointer select-none transition-all text-xs font-bold ${
+            exactMatch
+              ? 'bg-blue-50 border-blue-300 text-blue-800 shadow-sm'
+              : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+          }`}>
+            <input
+              type="checkbox"
+              checked={exactMatch}
+              onChange={(e) => setExactMatch(e.target.checked)}
+              className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
+            />
+            <span>📌 Birebir Tam Eşleşme <span className="text-[11px] font-normal text-slate-500">(İç Mimarlığı eler)</span></span>
+          </label>
+
+          {/* Excel Export Button */}
+          <button
+            onClick={exportExcel}
+            className="flex items-center gap-2 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-700 hover:to-amber-600 text-white px-5 py-3 rounded-2xl font-bold text-xs shadow-md shadow-amber-500/20 transition-all shrink-0"
+          >
+            <Download className="w-4 h-4" /> Excel Olarak İndir
+          </button>
+        </div>
+
+        {/* Quick Search Suggestion Pills */}
+        <div className="flex items-center gap-2 flex-wrap text-xs">
+          <span className="text-slate-400 font-semibold text-[11px]">Hızlı Aramalar:</span>
+          {['Yazılım Mühendisliği', 'Tıp', 'Hukuk', 'Mimarlık', 'Bilgisayar Mühendisliği', 'Psikoloji', 'Hemşirelik'].map((tag) => (
+            <button
+              key={tag}
+              onClick={() => handleQuickSearch(tag)}
+              className="bg-slate-100 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 text-slate-600 px-3 py-1 rounded-full text-[11px] font-medium border border-slate-200 transition-all"
+            >
+              #{tag}
+            </button>
+          ))}
+        </div>
+
+        {/* Ranking Range Filter Bar (NEW FEATURE) */}
+        <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-200 space-y-3">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-xs font-extrabold text-slate-900">
+              <SlidersHorizontal className="w-4 h-4 text-blue-600" />
+              <span>🎯 2025 Yerleşen Son Kişi Sıralama Aralığı Filtresi</span>
+            </div>
+
+            {/* Presets */}
+            <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
+              <span className="text-slate-400 font-semibold">Hızlı Aralıklar:</span>
+              <button
+                onClick={() => handleRankPreset(1, 10000)}
+                className="bg-white border border-slate-200 text-slate-700 hover:border-blue-300 hover:text-blue-700 px-2.5 py-1 rounded-lg font-bold"
+              >
+                Top 10.000
+              </button>
+              <button
+                onClick={() => handleRankPreset(10000, 50000)}
+                className="bg-white border border-slate-200 text-slate-700 hover:border-blue-300 hover:text-blue-700 px-2.5 py-1 rounded-lg font-bold"
+              >
+                10k – 50k
+              </button>
+              <button
+                onClick={() => handleRankPreset(50000, 100000)}
+                className="bg-white border border-slate-200 text-slate-700 hover:border-blue-300 hover:text-blue-700 px-2.5 py-1 rounded-lg font-bold"
+              >
+                50k – 100k
+              </button>
+              <button
+                onClick={() => handleRankPreset(100000, 200000)}
+                className="bg-white border border-slate-200 text-slate-700 hover:border-blue-300 hover:text-blue-700 px-2.5 py-1 rounded-lg font-bold"
+              >
+                100k – 200k
+              </button>
+              {(minRank || maxRank) && (
+                <button
+                  onClick={clearRankFilter}
+                  className="bg-rose-50 text-rose-700 border border-rose-200 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1"
+                >
+                  <XCircle className="w-3.5 h-3.5" /> Temizle
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Ranking Min - Max Number Inputs */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                En Yüksek Sıralama (Min):
+              </label>
+              <input
+                type="number"
+                value={minRank}
+                onChange={(e) => setMinRank(e.target.value)}
+                placeholder="Örn: 50000"
+                className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                En Düşük Sıralama (Max):
+              </label>
+              <input
+                type="number"
+                value={maxRank}
+                onChange={(e) => setMaxRank(e.target.value)}
+                placeholder="Örn: 100000"
+                className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Custom Multi-Select Dropdowns Grid with Search Box */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 pt-3 border-t border-slate-100 z-20">
+          <MultiSelectDropdown
+            label="📈 Durum Filtresi"
+            options={['Kapatılanlar Hariç', 'Sadece Kapatılanlar (-100%)', 'Sadece Yeni Açılanlar (+100%)']}
+            selectedValues={selectedStatuses}
+            onChange={setSelectedStatuses}
+            placeholder="Durum süzün..."
+            allLabel="Tüm Bölümler"
+          />
+
+          <MultiSelectDropdown
+            label="🏫 Üniversite Türü"
+            options={['Devlet', 'Vakıf', 'KKTC']}
+            selectedValues={selectedUniTypes}
+            onChange={setSelectedUniTypes}
+            placeholder="Tür arayın..."
+            allLabel="Tüm Türler"
+          />
+
+          <MultiSelectDropdown
+            label="🎯 Puan Türü"
+            options={['SAY', 'EA', 'SÖZ', 'DİL', 'TYT']}
+            selectedValues={selectedScoreTypes}
+            onChange={setSelectedScoreTypes}
+            placeholder="Puan arayın..."
+            allLabel="Tüm Puanlar"
+          />
+
+          <MultiSelectDropdown
+            label="🎓 Öğrenim Derecesi"
+            options={['Lisans (4+ Yıl)', 'Önlisans (2 Yıl)']}
+            selectedValues={selectedDegrees}
+            onChange={setSelectedDegrees}
+            placeholder="Derece arayın..."
+            allLabel="Tüm Dereceler"
+          />
+
+          <MultiSelectDropdown
+            label="🏙️ Şehir (İl - Çoklu Seçim)"
+            options={CITIES_LIST}
+            selectedValues={selectedCities}
+            onChange={setSelectedCities}
+            placeholder="İl adı yazın (Örn: Ankara)..."
+            allLabel="Tüm İller"
+          />
+        </div>
+      </div>
+
+      {/* Summary KPI Ribbon */}
+      <div className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4 shadow-lg shadow-emerald-600/10">
+        <div className="flex items-center gap-2.5 font-extrabold text-sm">
+          <Sparkles className="w-5 h-5 text-emerald-200" />
+          <span>🎯 GÜNCEL (2026) KONTENJAN: {total2026.toLocaleString()}</span>
+        </div>
+        <div className="flex items-center gap-6 text-xs font-semibold">
+          <span>2025 Kontenjanı: <strong>{total2025.toLocaleString()}</strong></span>
+          <span>Net Değişim: <strong>{netDiff >= 0 ? `+${netDiff.toLocaleString()}` : netDiff.toLocaleString()}</strong></span>
+          <span>Listelenen Kayıt: <strong>{filteredPrograms.length}</strong></span>
+        </div>
+      </div>
+
+      {/* Data Table Container */}
+      <div className="premium-card rounded-3xl overflow-hidden bg-white border border-slate-200 shadow-sm">
+        <div className="overflow-x-auto max-h-[620px]">
+          <table className="w-full text-left border-collapse">
+            <thead className="bg-slate-100/90 text-[11px] font-extrabold text-slate-700 uppercase tracking-wider sticky top-0 border-b border-slate-200 z-10 backdrop-blur-md">
+              <tr>
+                <th className="py-3.5 px-5">Üniversite Adı</th>
+                <th className="py-3.5 px-3 text-center">Tür</th>
+                <th className="py-3.5 px-3 text-center">Şehir</th>
+                <th className="py-3.5 px-5">Program / Bölüm Adı</th>
+                <th className="py-3.5 px-3 text-center">Puan</th>
+                <th className="py-3.5 px-4 text-right bg-blue-50/70 text-blue-900 border-x border-blue-100">
+                  2025 Yerleşen Son Sıralama
+                </th>
+                <th className="py-3.5 px-3 text-right">2025 Kont.</th>
+                <th className="py-3.5 px-3 text-right">2026 Kont.</th>
+                <th className="py-3.5 px-3 text-right">Net Değişim</th>
+                <th className="py-3.5 px-3 text-center">Değişim Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200/80 text-xs font-medium text-slate-800">
+              {loading ? (
+                <tr>
+                  <td colSpan="10" className="py-16 text-center text-slate-400 font-semibold">
+                    ⏳ Veriler yükleniyor...
+                  </td>
+                </tr>
+              ) : filteredPrograms.length === 0 ? (
+                <tr>
+                  <td colSpan="10" className="py-16 text-center text-slate-400 font-semibold">
+                    Arama, sıralama aralığı ve süzgeç kriterlerinize uygun program bulunamadı.
+                  </td>
+                </tr>
+              ) : (
+                filteredPrograms.map((p) => {
+                  const r25 = p.quota_records.find(r => r.year === 2025);
+                  const r26 = p.quota_records.find(r => r.year === 2026);
+                  const k25 = r25 ? r25.total_quota : 0;
+                  const k26 = r26 ? r26.total_quota : 0;
+                  const rank25 = r25 && r25.min_ranking ? r25.min_ranking.toLocaleString() : 'Dolmadı / Yok';
+                  const diff = k26 - k25;
+
+                  const isClosed = k25 > 0 && k26 === 0;
+                  const isNew = k25 === 0 && k26 > 0;
+
+                  return (
+                    <tr
+                      key={p.id}
+                      className={`hover:bg-blue-50/40 transition-colors ${
+                        isClosed ? 'bg-rose-50/70' : isNew ? 'bg-emerald-50/70' : ''
+                      }`}
+                    >
+                      <td className="py-3 px-5 font-bold text-slate-900">{p.university_name}</td>
+                      <td className="py-3 px-3 text-center">
+                        <span className="bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-md text-[10px] font-bold border border-slate-200">
+                          {p.university_type}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-center text-slate-600 font-medium">{p.city}</td>
+                      <td className="py-3 px-5 text-blue-700 font-bold">{p.name}</td>
+                      <td className="py-3 px-3 text-center font-extrabold text-slate-700">{p.score_type}</td>
+                      
+                      {/* 2025 Last Placed Student Ranking Column */}
+                      <td className="py-3 px-4 text-right font-mono font-extrabold text-blue-900 bg-blue-50/40 border-x border-blue-100">
+                        {rank25}
+                      </td>
+
+                      <td className="py-3 px-3 text-right font-mono text-slate-700">{k25.toLocaleString()}</td>
+                      <td className="py-3 px-3 text-right font-mono font-extrabold text-slate-900">{k26.toLocaleString()}</td>
+                      <td className={`py-3 px-3 text-right font-mono font-extrabold ${
+                        diff > 0 ? 'text-emerald-600' : diff < 0 ? 'text-rose-600' : 'text-slate-400'
+                      }`}>
+                        {diff > 0 ? `+${diff}` : diff}
+                      </td>
+                      <td className="py-3 px-3 text-center">
+                        {isClosed ? (
+                          <span className="bg-rose-100 border border-rose-200 text-rose-700 px-2.5 py-1 rounded-full font-bold text-[10px]">
+                            🚫 KAPATILDI (-100%)
+                          </span>
+                        ) : isNew ? (
+                          <span className="bg-emerald-100 border border-emerald-200 text-emerald-700 px-2.5 py-1 rounded-full font-bold text-[10px]">
+                            🟢 YENİ AÇILDI (+100%)
+                          </span>
+                        ) : diff > 0 ? (
+                          <span className="text-emerald-600 font-extrabold">▲ +{((diff/k25)*100).toFixed(1)}%</span>
+                        ) : diff < 0 ? (
+                          <span className="text-rose-600 font-extrabold">▼ {((diff/k25)*100).toFixed(1)}%</span>
+                        ) : (
+                          <span className="text-slate-400">%0</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
