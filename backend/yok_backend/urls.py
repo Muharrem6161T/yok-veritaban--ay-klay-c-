@@ -1,20 +1,10 @@
 from django.contrib import admin
-from django.urls import path, include
-from django.http import JsonResponse
-
-def root_api_view(request):
-    return JsonResponse({
-        "status": "online",
-        "service": "YÖK Veri Analitiği Platformu API",
-        "endpoints": {
-            "programs": "/api/programs/",
-            "analytics": "/api/analytics/",
-            "ranking_forecasts": "/api/ranking-forecasts/"
-        }
-    })
+from django.urls import path, include, re_path
+from django.views.generic import TemplateView
 
 urlpatterns = [
-    path('', root_api_view, name='root-api'),
     path('admin/', admin.site.urls),
     path('api/', include('analytics.urls')),
+    # Catch-all route to serve React frontend SPA
+    re_path(r'^.*$', TemplateView.as_view(template_name='index.html'), name='react-app'),
 ]

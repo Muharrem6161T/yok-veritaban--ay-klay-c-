@@ -1,6 +1,5 @@
 # Node / Frontend
 frontend/node_modules/
-frontend/dist/
 
 # Local Git Tools
 git_tools/

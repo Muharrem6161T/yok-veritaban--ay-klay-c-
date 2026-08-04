@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+FRONTEND_DIST = BASE_DIR.parent / 'frontend' / 'dist'
 
 SECRET_KEY = 'django-insecure-yok-veri-ayiklayici-secret-key-key-key'
 
@@ -42,7 +43,7 @@ ROOT_URLCONF = 'yok_backend.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [FRONTEND_DIST],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -71,8 +72,15 @@ TIME_ZONE = 'Europe/Istanbul'
 USE_I18N = True
 USE_TZ = True
 
-STATIC_URL = 'static/'
+STATIC_URL = '/assets/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+STATICFILES_DIRS = [
+    FRONTEND_DIST / 'assets',
+]
+
+# Configure WhiteNoise to serve SPA fallback
+WHITENOISE_INDEX_FILE = True
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
