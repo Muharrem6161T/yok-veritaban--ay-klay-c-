@@ -10,7 +10,7 @@ class UniversitySerializer(serializers.ModelSerializer):
 class QuotaRecordSerializer(serializers.ModelSerializer):
     class Meta:
         model = QuotaRecord
-        fields = ['id', 'year', 'general_quota', 'top_school_quota', 'total_quota', 'min_score', 'min_ranking', 'is_closed', 'is_new']
+        fields = ['id', 'year', 'general_quota', 'top_school_quota', 'meb_quota', 'total_quota', 'min_score', 'min_ranking', 'is_closed', 'is_new']
 
 
 class ProgramSerializer(serializers.ModelSerializer):

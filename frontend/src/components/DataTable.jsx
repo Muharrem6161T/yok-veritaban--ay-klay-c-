@@ -107,6 +107,32 @@ export default function DataTable({ defaultDegree = 'Lisans (4+ Yıl)', title = 
     setMaxRank('');
   };
 
+  // Helper to extract PURE QUOTA value based on active Kontenjan Türü filter
+  const getQuotaValue = (record) => {
+    if (!record) return 0;
+    if (selectedSpecialQuotas.includes('Okul Birincisi Kontenjanı')) {
+      return record.top_school_quota || 0;
+    }
+    if (selectedSpecialQuotas.includes('Meslek Lisesi / MOKO Kontenjanı')) {
+      return record.meb_quota || 0;
+    }
+    if (selectedSpecialQuotas.includes('Toplam Kontenjan (Genel + Özel)')) {
+      return record.total_quota || 0;
+    }
+    // Default PURE Genel Kontenjan (excluding top school & MEB)
+    return record.general_quota !== undefined && record.general_quota !== null
+      ? record.general_quota
+      : record.total_quota || 0;
+  };
+
+  // Dynamic Label for Quota Column Header
+  const getQuotaHeaderLabel = () => {
+    if (selectedSpecialQuotas.includes('Okul Birincisi Kontenjanı')) return 'Okul Birincisi Kontenjanı';
+    if (selectedSpecialQuotas.includes('Meslek Lisesi / MOKO Kontenjanı')) return 'Meslek Lisesi Kontenjanı';
+    if (selectedSpecialQuotas.includes('Toplam Kontenjan (Genel + Özel)')) return 'Toplam Kontenjan';
+    return 'Genel Kontenjan';
+  };
+
   // Client-side filter for status
   const filteredPrograms = programs.filter(p => {
     if (selectedStatuses.length === 0) return true;
@@ -114,8 +140,8 @@ export default function DataTable({ defaultDegree = 'Lisans (4+ Yıl)', title = 
     const r2025 = p.quota_records.find(r => r.year === 2025);
     const r2026 = p.quota_records.find(r => r.year === 2026);
     
-    const k25 = r2025 ? r2025.total_quota : 0;
-    const k26 = r2026 ? r2026.total_quota : 0;
+    const k25 = getQuotaValue(r2025);
+    const k26 = getQuotaValue(r2026);
 
     const isClosed = k25 > 0 && k26 === 0;
     const isNew = k25 === 0 && k26 > 0;
@@ -129,12 +155,18 @@ export default function DataTable({ defaultDegree = 'Lisans (4+ Yıl)', title = 
     return match;
   });
 
+  // Calculate dynamic ribbon sums for active quota type
+  const activeQuotaHeader = getQuotaHeaderLabel();
+  const sum2026Active = filteredPrograms.reduce((acc, p) => acc + getQuotaValue(p.quota_records.find(r => r.year === 2026)), 0);
+  const sum2025Active = filteredPrograms.reduce((acc, p) => acc + getQuotaValue(p.quota_records.find(r => r.year === 2025)), 0);
+  const netDiffActive = sum2026Active - sum2025Active;
+
   const exportExcel = () => {
     const excelData = filteredPrograms.map(p => {
       const r25 = p.quota_records.find(r => r.year === 2025);
       const r26 = p.quota_records.find(r => r.year === 2026);
-      const k25 = r25 ? r25.total_quota : 0;
-      const k26 = r26 ? r26.total_quota : 0;
+      const k25 = getQuotaValue(r25);
+      const k26 = getQuotaValue(r26);
       const rank25 = r25 && r25.min_ranking ? r25.min_ranking : 'Dolmadı / Yok';
       const diff = k26 - k25;
       
@@ -150,8 +182,8 @@ export default function DataTable({ defaultDegree = 'Lisans (4+ Yıl)', title = 
         'Program / Bölüm Adı': p.name,
         'Puan Türü': p.score_type,
         '2025 Son Yerleşen Sıralaması': rank25,
-        '2025 Kontenjan': k25,
-        '2026 Kontenjan': k26,
+        [`2025 ${activeQuotaHeader}`]: k25,
+        [`2026 ${activeQuotaHeader}`]: k26,
         'Net Değişim': diff,
         'Değişim Status': statusStr
       };
@@ -322,11 +354,9 @@ export default function DataTable({ defaultDegree = 'Lisans (4+ Yıl)', title = 
             label="⭐ Kontenjan Türü"
             options={[
               'Genel Kontenjan',
-              'Meslek Lisesi / MOKO Kontenjanı',
               'Okul Birincisi Kontenjanı',
-              'Şehit/Gazi Yakını Kontenjanı',
-              '34 Yaş Üstü Kadın Kontenjanı',
-              'Depremzede Kontenjanı'
+              'Meslek Lisesi / MOKO Kontenjanı',
+              'Toplam Kontenjan (Genel + Özel)'
             ]}
             selectedValues={selectedSpecialQuotas}
             onChange={setSelectedSpecialQuotas}
@@ -380,11 +410,11 @@ export default function DataTable({ defaultDegree = 'Lisans (4+ Yıl)', title = 
       <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4 shadow-lg shadow-emerald-600/10">
         <div className="flex items-center gap-2.5 font-extrabold text-sm">
           <Sparkles className="w-5 h-5 text-emerald-200" />
-          <span>🎯 GÜNCEL (2026) KONTENJAN: {dbSummary.total_quota_2026.toLocaleString()}</span>
+          <span>🎯 GÜNCEL (2026) {activeQuotaHeader.toUpperCase()}: {sum2026Active.toLocaleString()}</span>
         </div>
         <div className="flex items-center gap-6 text-xs font-semibold">
-          <span>2025 Kontenjanı: <strong>{dbSummary.total_quota_2025.toLocaleString()}</strong></span>
-          <span>Net Değişim: <strong>{dbSummary.net_diff >= 0 ? `+${dbSummary.net_diff.toLocaleString()}` : dbSummary.net_diff.toLocaleString()}</strong></span>
+          <span>2025 {activeQuotaHeader}: <strong>{sum2025Active.toLocaleString()}</strong></span>
+          <span>Net Değişim: <strong>{netDiffActive >= 0 ? `+${netDiffActive.toLocaleString()}` : netDiffActive.toLocaleString()}</strong></span>
           <span>Toplam Bölüm Sayısı: <strong>{dbSummary.matching_records.toLocaleString()}</strong></span>
         </div>
       </div>
@@ -403,8 +433,8 @@ export default function DataTable({ defaultDegree = 'Lisans (4+ Yıl)', title = 
                 <th className="py-3.5 px-4 text-right bg-blue-50/70 text-blue-900 border-x border-blue-100">
                   2025 Yerleşen Son Sıralama
                 </th>
-                <th className="py-3.5 px-3 text-right">2025 Kont.</th>
-                <th className="py-3.5 px-3 text-right">2026 Kont.</th>
+                <th className="py-3.5 px-3 text-right">2025 {activeQuotaHeader}</th>
+                <th className="py-3.5 px-3 text-right">2026 {activeQuotaHeader}</th>
                 <th className="py-3.5 px-3 text-right">Net Değişim</th>
                 <th className="py-3.5 px-3 text-center">Değişim Status</th>
               </tr>
@@ -426,8 +456,8 @@ export default function DataTable({ defaultDegree = 'Lisans (4+ Yıl)', title = 
                 filteredPrograms.map((p) => {
                   const r25 = p.quota_records.find(r => r.year === 2025);
                   const r26 = p.quota_records.find(r => r.year === 2026);
-                  const k25 = r25 ? r25.total_quota : 0;
-                  const k26 = r26 ? r26.total_quota : 0;
+                  const k25 = getQuotaValue(r25);
+                  const k26 = getQuotaValue(r26);
                   const rank25 = r25 && r25.min_ranking ? r25.min_ranking.toLocaleString() : 'Dolmadı / Yok';
                   const diff = k26 - k25;
 
@@ -473,9 +503,9 @@ export default function DataTable({ defaultDegree = 'Lisans (4+ Yıl)', title = 
                             🟢 YENİ AÇILDI (+100%)
                           </span>
                         ) : diff > 0 ? (
-                          <span className="text-emerald-600 font-extrabold">▲ +{((diff/k25)*100).toFixed(1)}%</span>
+                          <span className="text-emerald-600 font-extrabold">▲ +{k25 > 0 ? ((diff/k25)*100).toFixed(1) : 0}%</span>
                         ) : diff < 0 ? (
-                          <span className="text-rose-600 font-extrabold">▼ {((diff/k25)*100).toFixed(1)}%</span>
+                          <span className="text-rose-600 font-extrabold">▼ {k25 > 0 ? ((diff/k25)*100).toFixed(1) : 0}%</span>
                         ) : (
                           <span className="text-slate-400">%0</span>
                         )}
