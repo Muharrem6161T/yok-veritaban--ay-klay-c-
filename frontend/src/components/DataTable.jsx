@@ -123,8 +123,8 @@ export default function DataTable({ defaultDegree = 'Lisans (4+ Yıl)', title = 
 
     let match = false;
     if (selectedStatuses.includes('Kapatılanlar Hariç') && isActive) match = true;
-    if (selectedStatuses.includes('Sadece Kapatılanlar (-100%)') && isClosed) match = true;
-    if (selectedStatuses.includes('Sadece Yeni Açılanlar (+100%)') && isNew) match = true;
+    if ((selectedStatuses.includes('Kapatılanlar (-100%)') || selectedStatuses.includes('Sadece Kapatılanlar (-100%)')) && isClosed) match = true;
+    if ((selectedStatuses.includes('Yeni Açılanlar (+100%)') || selectedStatuses.includes('Sadece Yeni Açılanlar (+100%)')) && isNew) match = true;
 
     return match;
   });
@@ -200,7 +200,7 @@ export default function DataTable({ defaultDegree = 'Lisans (4+ Yıl)', title = 
               onChange={(e) => setExactMatch(e.target.checked)}
               className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
             />
-            <span>📌 Birebir Tam Eşleşme <span className="text-[11px] font-normal text-slate-500">(Yan bölümleri eler)</span></span>
+            <span>📌 Birebir Tam Eşleşme</span>
           </label>
 
           {/* Excel Export Button */}
@@ -305,11 +305,11 @@ export default function DataTable({ defaultDegree = 'Lisans (4+ Yıl)', title = 
           </div>
         </div>
 
-        {/* Custom Multi-Select Dropdowns Grid (Searchable Program Combobox dynamically loaded from DB) */}
+        {/* Custom Multi-Select Dropdowns Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 pt-3 border-t border-slate-100 z-20">
-          {/* SEARCHABLE MULTI-SELECT PROGRAM COMBOBOX (Tüm Bölümler Veritabanından Dinamik Alınır) */}
+          {/* SEARCHABLE MULTI-SELECT PROGRAM COMBOBOX */}
           <MultiSelectDropdown
-            label={`🎓 ${defaultDegree.includes('Önlisans') ? 'Önlisans' : 'Lisans'} Bölümleri (${allDepartmentNames.length} Bölüm)`}
+            label={`🎓 Program / Bölüm`}
             options={allDepartmentNames}
             selectedValues={selectedPrograms}
             onChange={setSelectedPrograms}
@@ -319,7 +319,7 @@ export default function DataTable({ defaultDegree = 'Lisans (4+ Yıl)', title = 
 
           {/* SPECIAL QUOTAS FILTER */}
           <MultiSelectDropdown
-            label="⭐ Özel Kontenjan Türü"
+            label="⭐ Özel Kontenjan"
             options={['Okul Birincisi Kontenjanı Olanlar', 'Şehit/Gazi Yakını Kontenjanı Olanlar', '34 Yaş Üstü Kadın Kontenjanı Olanlar', 'Depremzede Kontenjanı Olanlar']}
             selectedValues={selectedSpecialQuotas}
             onChange={setSelectedSpecialQuotas}
@@ -330,7 +330,7 @@ export default function DataTable({ defaultDegree = 'Lisans (4+ Yıl)', title = 
           {/* Multi-Select Status Filter */}
           <MultiSelectDropdown
             label="📈 Durum Filtresi"
-            options={['Kapatılanlar Hariç', 'Sadece Kapatılanlar (-100%)', 'Sadece Yeni Açılanlar (+100%)']}
+            options={['Kapatılanlar Hariç', 'Kapatılanlar (-100%)', 'Yeni Açılanlar (+100%)']}
             selectedValues={selectedStatuses}
             onChange={setSelectedStatuses}
             placeholder="Durum süzün..."
@@ -359,11 +359,11 @@ export default function DataTable({ defaultDegree = 'Lisans (4+ Yıl)', title = 
 
           {/* Multi-Select Searchable Cities Filter */}
           <MultiSelectDropdown
-            label="🏙️ Şehir (İl - Çoklu Seçim)"
+            label="🏙️ Şehir"
             options={CITIES_LIST}
             selectedValues={selectedCities}
             onChange={setSelectedCities}
-            placeholder="İl adı yazın (Örn: Ankara)..."
+            placeholder="İl adı yazın..."
             allLabel="Tüm İller"
           />
         </div>
