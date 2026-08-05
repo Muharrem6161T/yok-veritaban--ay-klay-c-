@@ -10,13 +10,17 @@ from analytics.services.ingestion import ingest_excel_file
 
 class DepartmentNamesView(APIView):
     """
-    Veritabanındaki tüm benzersiz Lisans veya Önlisans bölüm isimlerini alfabe sırasıyla döner.
+    Veritabanındaki sadece ilgili dereceye (Lisans veya Önlisans) ait 
+    benzersiz bölüm isimlerini alfabe sırasıyla döner.
     """
     def get(self, request):
         degree = request.GET.get('degree', '').strip()
         qs = Program.objects.all()
         if degree:
-            qs = qs.filter(degree__icontains=degree.split(' ')[0])
+            if 'Önlisans' in degree:
+                qs = qs.filter(degree__icontains='Önlisans')
+            else:
+                qs = qs.filter(degree__icontains='Lisans').exclude(degree__icontains='Önlisans')
         
         raw_names = qs.values_list('clean_name', flat=True).distinct()
         unique_names = sorted(list(set([n.strip() for n in raw_names if n and n.strip()])))
