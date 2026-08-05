@@ -8,6 +8,21 @@ from analytics.serializers import ProgramSerializer, UniversitySerializer
 from analytics.services.ml_engine import predict_program_ranking_2026, predict_program_future, get_dashboard_analytics
 from analytics.services.ingestion import ingest_excel_file
 
+class DepartmentNamesView(APIView):
+    """
+    Veritabanındaki tüm benzersiz Lisans veya Önlisans bölüm isimlerini alfabe sırasıyla döner.
+    """
+    def get(self, request):
+        degree = request.GET.get('degree', '').strip()
+        qs = Program.objects.all()
+        if degree:
+            qs = qs.filter(degree__icontains=degree.split(' ')[0])
+        
+        raw_names = qs.values_list('clean_name', flat=True).distinct()
+        unique_names = sorted(list(set([n.strip() for n in raw_names if n and n.strip()])))
+        return Response(unique_names)
+
+
 class ProgramListView(APIView):
     """
     Kapsamlı arama, çoklu bölüm seçimi, özel kontenjanlar, sıralama aralığı ve 
@@ -36,7 +51,7 @@ class ProgramListView(APIView):
             if prog_list:
                 prog_q = Q()
                 for p_item in prog_list:
-                    prog_q |= Q(clean_name__icontains=p_item) | Q(name__icontains=p_item)
+                    prog_q |= Q(clean_name__iexact=p_item) | Q(clean_name__icontains=p_item)
                 queryset = queryset.filter(prog_q)
 
         cities = request.GET.get('cities', '')
@@ -88,7 +103,7 @@ class ProgramListView(APIView):
         queryset = queryset.distinct()
         total_matching_count = queryset.count()
 
-        # Database-wide aggregated totals for current filters (solves user request #4)
+        # Database-wide aggregated totals for current filters
         filtered_program_ids = queryset.values_list('id', flat=True)
         sum_2025 = QuotaRecord.objects.filter(program_id__in=filtered_program_ids, year=2025).aggregate(tot=Sum('total_quota'))['tot'] or 0
         sum_2026 = QuotaRecord.objects.filter(program_id__in=filtered_program_ids, year=2026).aggregate(tot=Sum('total_quota'))['tot'] or 0

@@ -4,11 +4,13 @@ from analytics.views import (
     RankingForecastListView,
     ProgramPredictView, 
     DashboardAnalyticsView, 
-    IngestExcelView
+    IngestExcelView,
+    DepartmentNamesView
 )
 
 urlpatterns = [
     path('programs/', ProgramListView.as_view(), name='program-list'),
+    path('department-names/', DepartmentNamesView.as_view(), name='department-names-list'),
     path('ranking-forecasts/', RankingForecastListView.as_view(), name='ranking-forecast-list'),
     path('predict/<int:program_id>/', ProgramPredictView.as_view(), name='program-predict'),
     path('analytics/', DashboardAnalyticsView.as_view(), name='dashboard-analytics'),

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Download, XCircle, Sparkles, SlidersHorizontal, BookOpen } from 'lucide-react';
+import { Search, Download, XCircle, Sparkles, SlidersHorizontal } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import axios from 'axios';
 import MultiSelectDropdown from './MultiSelectDropdown';
@@ -16,21 +16,14 @@ const CITIES_LIST = [
   'ŞANLIURFA', 'ŞIRNAK', 'TEKİRDAĞ', 'TOKAT', 'TRABZON', 'TUNCELİ', 'UŞAK', 'VAN', 'YALOVA', 'YOZGAT', 'ZONGULDAK'
 ];
 
-// Popular Departments List
-const DEPARTMENTS_LIST = [
-  'Yazılım Mühendisliği', 'Bilgisayar Mühendisliği', 'Yapay Zeka Mühendisliği', 'Tıp', 'Hukuk', 'Mimarlık',
-  'İç Mimarlık', 'Psikoloji', 'Hemşirelik', 'Diş Hekimliği', 'Eczacılık', 'Elektrik-Elektronik Mühendisliği',
-  'Endüstri Mühendisliği', 'Makine Mühendisliği', 'İnşaat Mühendisliği', 'İşletme', 'İktisat', 'Sınıf Öğretmenliği',
-  'Okul Öncesi Öğretmenliği', 'İngilizce Öğretmenliği', 'Beslenme ve Diyetetik', 'Fizyoterapi ve Rehabilitasyon',
-  'Bilgisayar Programcılığı', 'İlk ve Acil Yardım', 'Adalet', 'Ağız ve Diş Sağlığı', 'Anestezi', 'Tıbbi Görüntüleme Teknikleri',
-  'Diyaliz', 'Ameliyathane Hizmetleri', 'Eczane Hizmetleri', 'Optisyenlik', 'Uçak Teknolojisi', 'Siber Güvenlik Analistliği'
-];
-
 export default function DataTable({ defaultDegree = 'Lisans (4+ Yıl)', title = 'Lisans Programları' }) {
   const [programs, setPrograms] = useState([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [exactMatch, setExactMatch] = useState(false);
+
+  // Dynamic Full Department Names List fetched from API
+  const [allDepartmentNames, setAllDepartmentNames] = useState([]);
 
   // Multi-select State Arrays
   const [selectedPrograms, setSelectedPrograms] = useState([]);
@@ -45,13 +38,25 @@ export default function DataTable({ defaultDegree = 'Lisans (4+ Yıl)', title = 
   const [minRank, setMinRank] = useState('');
   const [maxRank, setMaxRank] = useState('');
 
-  // Database-wide Aggregated Totals Summary State (Solves User Request #4)
+  // Database-wide Aggregated Totals Summary State
   const [dbSummary, setDbSummary] = useState({
     total_quota_2025: 0,
     total_quota_2026: 0,
     net_diff: 0,
     matching_records: 0
   });
+
+  // Fetch ALL unique department names for active degree dynamically from Database
+  useEffect(() => {
+    setSelectedPrograms([]); // Reset selection when switching tabs
+    axios.get('/api/department-names/', { params: { degree: defaultDegree } })
+      .then(res => {
+        if (Array.isArray(res.data)) {
+          setAllDepartmentNames(res.data);
+        }
+      })
+      .catch(err => console.error('Error fetching department names:', err));
+  }, [defaultDegree]);
 
   const fetchPrograms = async () => {
     setLoading(true);
@@ -300,19 +305,19 @@ export default function DataTable({ defaultDegree = 'Lisans (4+ Yıl)', title = 
           </div>
         </div>
 
-        {/* Custom Multi-Select Dropdowns Grid (Searchable Program Combobox + Special Quotas) */}
+        {/* Custom Multi-Select Dropdowns Grid (Searchable Program Combobox dynamically loaded from DB) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 pt-3 border-t border-slate-100 z-20">
-          {/* SEARCHABLE MULTI-SELECT PROGRAM COMBOBOX (User Request #1) */}
+          {/* SEARCHABLE MULTI-SELECT PROGRAM COMBOBOX (Tüm Bölümler Veritabanından Dinamik Alınır) */}
           <MultiSelectDropdown
-            label="🎓 Program / Bölüm Adı (Çoklu Seçim)"
-            options={DEPARTMENTS_LIST}
+            label={`🎓 ${defaultDegree.includes('Önlisans') ? 'Önlisans' : 'Lisans'} Bölümleri (${allDepartmentNames.length} Bölüm)`}
+            options={allDepartmentNames}
             selectedValues={selectedPrograms}
             onChange={setSelectedPrograms}
-            placeholder="Bölüm adı yazın..."
+            placeholder="Bölüm adı arayın..."
             allLabel="Tüm Bölümler"
           />
 
-          {/* SPECIAL QUOTAS FILTER (User Request #2) */}
+          {/* SPECIAL QUOTAS FILTER */}
           <MultiSelectDropdown
             label="⭐ Özel Kontenjan Türü"
             options={['Okul Birincisi Kontenjanı Olanlar', 'Şehit/Gazi Yakını Kontenjanı Olanlar', '34 Yaş Üstü Kadın Kontenjanı Olanlar', 'Depremzede Kontenjanı Olanlar']}
@@ -364,7 +369,7 @@ export default function DataTable({ defaultDegree = 'Lisans (4+ Yıl)', title = 
         </div>
       </div>
 
-      {/* Summary KPI Ribbon (DATABASE-WIDE TOTAL AGGREGATED STATS - Solves User Request #4) */}
+      {/* Summary KPI Ribbon */}
       <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4 shadow-lg shadow-emerald-600/10">
         <div className="flex items-center gap-2.5 font-extrabold text-sm">
           <Sparkles className="w-5 h-5 text-emerald-200" />
