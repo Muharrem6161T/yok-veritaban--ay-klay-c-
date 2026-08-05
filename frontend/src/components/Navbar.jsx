@@ -1,5 +1,5 @@
 import React from 'react';
-import { GraduationCap, Table, BarChart3, Sparkles } from 'lucide-react';
+import { GraduationCap, Table, BookOpen, BarChart3, Sparkles } from 'lucide-react';
 
 export default function Navbar({ activeTab, setActiveTab }) {
   return (
@@ -25,7 +25,7 @@ export default function Navbar({ activeTab, setActiveTab }) {
                 6 Yıllık Veri Tabanı (2021–2026)
               </span>
               <span>•</span>
-              <span>70.818 İşlenen Kayıt</span>
+              <span>102.567 İşlenen Kayıt</span>
             </div>
           </div>
         </div>
@@ -33,19 +33,30 @@ export default function Navbar({ activeTab, setActiveTab }) {
         {/* Navigation Tabs */}
         <nav className="flex items-center bg-slate-100/80 p-1.5 rounded-2xl border border-slate-200/80 shadow-inner">
           <button
-            onClick={() => setActiveTab('table')}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 ${
-              activeTab === 'table'
+            onClick={() => setActiveTab('lisans')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 ${
+              activeTab === 'lisans'
                 ? 'bg-white text-blue-700 shadow-md shadow-slate-200/60 border border-slate-200'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
             }`}
           >
-            <Table className="w-4 h-4" /> Veri Tablosu
+            <Table className="w-4 h-4" /> 🎓 Lisans (4+ Yıl)
+          </button>
+
+          <button
+            onClick={() => setActiveTab('onlisans')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 ${
+              activeTab === 'onlisans'
+                ? 'bg-gradient-to-r from-teal-600 to-emerald-600 text-white shadow-md shadow-teal-500/20'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+            }`}
+          >
+            <BookOpen className="w-4 h-4 text-emerald-200" /> 📜 Önlisans (2 Yıl)
           </button>
 
           <button
             onClick={() => setActiveTab('charts')}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 ${
               activeTab === 'charts'
                 ? 'bg-white text-blue-700 shadow-md shadow-slate-200/60 border border-slate-200'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'

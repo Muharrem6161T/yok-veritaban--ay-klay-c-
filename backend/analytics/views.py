@@ -2,7 +2,7 @@ import os
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from django.db.models import Q
+from django.db.models import Q, Sum
 from analytics.models import University, Program, QuotaRecord
 from analytics.serializers import ProgramSerializer, UniversitySerializer
 from analytics.services.ml_engine import predict_program_ranking_2026, predict_program_future, get_dashboard_analytics
@@ -10,7 +10,8 @@ from analytics.services.ingestion import ingest_excel_file
 
 class ProgramListView(APIView):
     """
-    Kapsamlı arama, çoklu seçim, sıralama aralığı ve durum filtreli Program Listesi Uç Noktası.
+    Kapsamlı arama, çoklu bölüm seçimi, özel kontenjanlar, sıralama aralığı ve 
+    tüm veritabanı toplam metriklerini dönen Program Listesi Uç Noktası.
     """
     def get(self, request):
         queryset = Program.objects.select_related('university').prefetch_related('quota_records').all()
@@ -27,6 +28,16 @@ class ProgramListView(APIView):
                 queryset = queryset.filter(
                     Q(name__icontains=search) | Q(clean_name__icontains=search)
                 )
+
+        # Multi-select Program Names Filter
+        program_names = request.GET.get('program_names', '')
+        if program_names and program_names != 'Tümü':
+            prog_list = [p.strip() for p in program_names.split(',') if p.strip() and p.strip() != 'Tümü']
+            if prog_list:
+                prog_q = Q()
+                for p_item in prog_list:
+                    prog_q |= Q(clean_name__icontains=p_item) | Q(name__icontains=p_item)
+                queryset = queryset.filter(prog_q)
 
         cities = request.GET.get('cities', '')
         if cities and cities != 'Tümü':
@@ -52,6 +63,16 @@ class ProgramListView(APIView):
             if deg_list:
                 queryset = queryset.filter(degree__in=deg_list)
 
+        # Special Quotas Filter (Okul Birincisi vb.)
+        special_quotas = request.GET.get('special_quotas', '')
+        if special_quotas and special_quotas != 'Tümü':
+            sq_list = [s.strip() for s in special_quotas.split(',') if s.strip() and s.strip() != 'Tümü']
+            if sq_list:
+                sq_q = Q()
+                if any('Okul Birincisi' in s for s in sq_list):
+                    sq_q |= Q(quota_records__top_school_quota__gt=0)
+                queryset = queryset.filter(sq_q)
+
         # Ranking Range Filter (e.g. 50.000 - 100.000)
         min_rank = request.GET.get('min_rank', '').strip()
         max_rank = request.GET.get('max_rank', '').strip()
@@ -64,12 +85,28 @@ class ProgramListView(APIView):
                 rank_q &= Q(quota_records__min_ranking__lte=int(max_rank))
             queryset = queryset.filter(rank_q)
 
+        queryset = queryset.distinct()
+        total_matching_count = queryset.count()
+
+        # Database-wide aggregated totals for current filters (solves user request #4)
+        filtered_program_ids = queryset.values_list('id', flat=True)
+        sum_2025 = QuotaRecord.objects.filter(program_id__in=filtered_program_ids, year=2025).aggregate(tot=Sum('total_quota'))['tot'] or 0
+        sum_2026 = QuotaRecord.objects.filter(program_id__in=filtered_program_ids, year=2026).aggregate(tot=Sum('total_quota'))['tot'] or 0
+        net_diff = sum_2026 - sum_2025
+
         limit = int(request.GET.get('limit', 500))
         results = queryset[:limit]
 
         serializer = ProgramSerializer(results, many=True)
+
         return Response({
-            "count": queryset.count(),
+            "count": total_matching_count,
+            "summary": {
+                "total_quota_2025": sum_2025,
+                "total_quota_2026": sum_2026,
+                "net_diff": net_diff,
+                "matching_records": total_matching_count
+            },
             "results": serializer.data
         })
 

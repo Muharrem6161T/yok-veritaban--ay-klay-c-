@@ -42,10 +42,10 @@ def clean_dept_name(name):
     cleaned = re.sub(r'\(.*?\)', '', str(name)).strip()
     return cleaned if cleaned else str(name)
 
-def ingest_excel_file(file_path, year):
+def ingest_excel_file(file_path, year, default_degree=None):
     """
-    ÖSYM Tablo-4 Excel dosyasını veritabanına aktarır.
-    DİKKAT: Yılı Y olan Excel dosyasındaki Sıralama (Col 10/11) aslında Y-1 yılında yerleşen son kişinin sıralamasıdır!
+    ÖSYM Tablo-4 (Lisans) ve Tablo-3 (Önlisans) Excel dosyalarını veritabanına aktarır.
+    DİKKAT: Yılı Y olan Excel dosyasındaki Sıralama aslında Y-1 yılında yerleşen son kişinin sıralamasıdır!
     """
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"Excel dosyası bulunamadı: {file_path}")
@@ -62,6 +62,8 @@ def ingest_excel_file(file_path, year):
     df['UNIVERSTE_ADI'] = df['UNIVERSTE_ADI'].ffill()
 
     df_bolumler = df[is_program_code].copy()
+    if df_bolumler.empty:
+        return 0, 0
 
     # Sıralama ve Puan sütunlarını dinamik tespit et
     sample_row = df_bolumler.iloc[0]
@@ -71,7 +73,7 @@ def ingest_excel_file(file_path, year):
     for c in range(4, len(sample_row)):
         val = pd.to_numeric(sample_row.iloc[c], errors='coerce')
         if pd.notna(val):
-            if 100 <= val <= 3000000 and val == int(val) and c > 5:
+            if 100 <= val <= 3500000 and val == int(val) and c > 5:
                 if rank_col is None:
                     rank_col = c
             elif 100.0 <= val <= 600.0 and (val != int(val)):
@@ -80,7 +82,7 @@ def ingest_excel_file(file_path, year):
 
     records_created = 0
     records_updated = 0
-    prev_year = year - 1  # Kılavuzdaki sıralama bir önceki yılın yerleşen son kişisine aittir!
+    prev_year = year - 1
 
     for idx, row in df_bolumler.iterrows():
         prog_code = str(row.iloc[0]).split('.')[0].strip()
@@ -88,9 +90,9 @@ def ingest_excel_file(file_path, year):
         uni_name = str(row['UNIVERSTE_ADI']).strip() if pd.notna(row['UNIVERSTE_ADI']) else "Bilinmeyen Üniversite"
         
         duration = pd.to_numeric(row.iloc[2], errors='coerce')
-        duration = int(duration) if pd.notna(duration) else 4
+        duration = int(duration) if pd.notna(duration) else (2 if default_degree == "Önlisans (2 Yıl)" else 4)
         
-        puan_turu = str(row.iloc[3]).strip().upper() if pd.notna(row.iloc[3]) else "SAY"
+        puan_turu = str(row.iloc[3]).strip().upper() if pd.notna(row.iloc[3]) else ("TYT" if duration <= 2 else "SAY")
 
         # Kontenjanlar
         genel_kont = pd.to_numeric(row.iloc[4], errors='coerce')
@@ -139,7 +141,7 @@ def ingest_excel_file(file_path, year):
             }
         )
 
-        # 1. Mevcut Yıl (year) Kontenjan Kaydını Güncelle
+        # Mevcut Yıl (year) Kontenjan Kaydını Güncelle
         rec_obj, created = QuotaRecord.objects.update_or_create(
             program=program_obj,
             year=year,
@@ -152,7 +154,7 @@ def ingest_excel_file(file_path, year):
             }
         )
 
-        # 2. Bir Önceki Yıl (prev_year) Gerçekleşen Sıralama ve Puan Kaydını Güncelle
+        # Bir Önceki Yıl (prev_year) Gerçekleşen Sıralama ve Puan Kaydını Güncelle
         if rank_val or score_val:
             prev_rec, _ = QuotaRecord.objects.get_or_create(
                 program=program_obj,

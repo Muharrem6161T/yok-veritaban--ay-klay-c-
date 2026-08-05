@@ -6,7 +6,7 @@ import AnalyticsCharts from './components/AnalyticsCharts';
 import axios from 'axios';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('table');
+  const [activeTab, setActiveTab] = useState('lisans');
   const [summaryData, setSummaryData] = useState(null);
 
   useEffect(() => {
@@ -26,8 +26,12 @@ export default function App() {
         <StatCards summaryData={summaryData} />
 
         {/* Tab Views */}
-        {activeTab === 'table' && (
-          <DataTable />
+        {activeTab === 'lisans' && (
+          <DataTable defaultDegree="Lisans (4+ Yıl)" title="Lisans Programları (4+ Yıl - Tablo 4)" />
+        )}
+
+        {activeTab === 'onlisans' && (
+          <DataTable defaultDegree="Önlisans (2 Yıl)" title="Önlisans Programları (2 Yıl - Tablo 3)" />
         )}
 
         {activeTab === 'charts' && (
@@ -37,7 +41,7 @@ export default function App() {
 
       {/* Footer */}
       <footer className="border-t border-slate-200 bg-white py-6 text-center text-xs text-slate-500 font-semibold">
-        YÖK Kontenjan Analiz Platformu • 6 Yıllık Veri Tabanı (2021-2026)
+        YÖK Kontenjan Analiz Platformu • Lisans & Önlisans 6 Yıllık Veri Tabanı (2021-2026)
       </footer>
     </div>
   );

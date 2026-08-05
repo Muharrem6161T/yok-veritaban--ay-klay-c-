@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Download, XCircle, Sparkles, SlidersHorizontal } from 'lucide-react';
+import { Search, Download, XCircle, Sparkles, SlidersHorizontal, BookOpen } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import axios from 'axios';
 import MultiSelectDropdown from './MultiSelectDropdown';
@@ -16,22 +16,42 @@ const CITIES_LIST = [
   'ŞANLIURFA', 'ŞIRNAK', 'TEKİRDAĞ', 'TOKAT', 'TRABZON', 'TUNCELİ', 'UŞAK', 'VAN', 'YALOVA', 'YOZGAT', 'ZONGULDAK'
 ];
 
-export default function DataTable() {
+// Popular Departments List
+const DEPARTMENTS_LIST = [
+  'Yazılım Mühendisliği', 'Bilgisayar Mühendisliği', 'Yapay Zeka Mühendisliği', 'Tıp', 'Hukuk', 'Mimarlık',
+  'İç Mimarlık', 'Psikoloji', 'Hemşirelik', 'Diş Hekimliği', 'Eczacılık', 'Elektrik-Elektronik Mühendisliği',
+  'Endüstri Mühendisliği', 'Makine Mühendisliği', 'İnşaat Mühendisliği', 'İşletme', 'İktisat', 'Sınıf Öğretmenliği',
+  'Okul Öncesi Öğretmenliği', 'İngilizce Öğretmenliği', 'Beslenme ve Diyetetik', 'Fizyoterapi ve Rehabilitasyon',
+  'Bilgisayar Programcılığı', 'İlk ve Acil Yardım', 'Adalet', 'Ağız ve Diş Sağlığı', 'Anestezi', 'Tıbbi Görüntüleme Teknikleri',
+  'Diyaliz', 'Ameliyathane Hizmetleri', 'Eczane Hizmetleri', 'Optisyenlik', 'Uçak Teknolojisi', 'Siber Güvenlik Analistliği'
+];
+
+export default function DataTable({ defaultDegree = 'Lisans (4+ Yıl)', title = 'Lisans Programları' }) {
   const [programs, setPrograms] = useState([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [exactMatch, setExactMatch] = useState(false);
-  
+
   // Multi-select State Arrays
+  const [selectedPrograms, setSelectedPrograms] = useState([]);
   const [selectedCities, setSelectedCities] = useState([]);
   const [selectedUniTypes, setSelectedUniTypes] = useState([]);
   const [selectedScoreTypes, setSelectedScoreTypes] = useState([]);
-  const [selectedDegrees, setSelectedDegrees] = useState([]);
+  const [selectedDegrees, setSelectedDegrees] = useState(defaultDegree ? [defaultDegree] : []);
   const [selectedStatuses, setSelectedStatuses] = useState([]);
+  const [selectedSpecialQuotas, setSelectedSpecialQuotas] = useState([]);
 
   // Ranking Range Filter State (e.g. 50.000 - 100.000)
   const [minRank, setMinRank] = useState('');
   const [maxRank, setMaxRank] = useState('');
+
+  // Database-wide Aggregated Totals Summary State (Solves User Request #4)
+  const [dbSummary, setDbSummary] = useState({
+    total_quota_2025: 0,
+    total_quota_2026: 0,
+    net_diff: 0,
+    matching_records: 0
+  });
 
   const fetchPrograms = async () => {
     setLoading(true);
@@ -39,16 +59,21 @@ export default function DataTable() {
       const params = {
         search,
         exact: exactMatch,
+        program_names: selectedPrograms.join(','),
         cities: selectedCities.join(','),
         uni_types: selectedUniTypes.join(','),
         score_types: selectedScoreTypes.join(','),
-        degrees: selectedDegrees.join(','),
+        degrees: selectedDegrees.length > 0 ? selectedDegrees.join(',') : (defaultDegree || ''),
+        special_quotas: selectedSpecialQuotas.join(','),
         min_rank: minRank,
         max_rank: maxRank,
         limit: 500
       };
       const res = await axios.get('/api/programs/', { params });
       setPrograms(res.data.results || []);
+      if (res.data.summary) {
+        setDbSummary(res.data.summary);
+      }
     } catch (err) {
       console.error('Error fetching programs:', err);
     } finally {
@@ -61,7 +86,7 @@ export default function DataTable() {
       fetchPrograms();
     }, 300);
     return () => clearTimeout(timer);
-  }, [search, exactMatch, selectedCities, selectedUniTypes, selectedScoreTypes, selectedDegrees, selectedStatuses, minRank, maxRank]);
+  }, [search, exactMatch, selectedPrograms, selectedCities, selectedUniTypes, selectedScoreTypes, selectedDegrees, selectedStatuses, selectedSpecialQuotas, minRank, maxRank, defaultDegree]);
 
   const handleQuickSearch = (keyword) => {
     setSearch(keyword);
@@ -99,18 +124,6 @@ export default function DataTable() {
     return match;
   });
 
-  const total2025 = filteredPrograms.reduce((acc, p) => {
-    const r = p.quota_records.find(q => q.year === 2025);
-    return acc + (r ? r.total_quota : 0);
-  }, 0);
-
-  const total2026 = filteredPrograms.reduce((acc, p) => {
-    const r = p.quota_records.find(q => q.year === 2026);
-    return acc + (r ? r.total_quota : 0);
-  }, 0);
-
-  const netDiff = total2026 - total2025;
-
   const exportExcel = () => {
     const excelData = filteredPrograms.map(p => {
       const r25 = p.quota_records.find(r => r.year === 2025);
@@ -142,14 +155,14 @@ export default function DataTable() {
     const worksheet = XLSX.utils.json_to_sheet(excelData);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Kontenjan Analizi');
-    XLSX.writeFile(workbook, 'YOK_Kontenjan_Siralama_Raporu.xlsx');
+    XLSX.writeFile(workbook, `YOK_${title.replace(/\s+/g, '_')}_Raporu.xlsx`);
   };
 
   return (
     <div className="space-y-6">
       {/* Search & Multi-Select Filter Header Panel */}
       <div className="premium-card p-6 rounded-3xl space-y-5 bg-white border border-slate-200 shadow-sm">
-        {/* Main Search Row */}
+        {/* Title & Search Row */}
         <div className="flex flex-col lg:flex-row items-center justify-between gap-4">
           <div className="relative flex-1 w-full">
             <Search className="absolute left-4 top-3.5 w-5 h-5 text-blue-600" />
@@ -157,7 +170,7 @@ export default function DataTable() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Bölüm veya program adı arayın (Örn: Yazılım, Tıp, Mimarlık, Hukuk, Hemşirelik...)"
+              placeholder={`${title} arasında arayın (Örn: Yazılım, Tıp, Mimarlık, Hukuk, Bilgisayar Programcılığı...)`}
               className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-12 pr-10 py-3 text-sm font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-blue-600 focus:ring-4 focus:ring-blue-500/10 transition-all shadow-inner"
             />
             {search && (
@@ -182,7 +195,7 @@ export default function DataTable() {
               onChange={(e) => setExactMatch(e.target.checked)}
               className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
             />
-            <span>📌 Birebir Tam Eşleşme <span className="text-[11px] font-normal text-slate-500">(İç Mimarlığı eler)</span></span>
+            <span>📌 Birebir Tam Eşleşme <span className="text-[11px] font-normal text-slate-500">(Yan bölümleri eler)</span></span>
           </label>
 
           {/* Excel Export Button */}
@@ -197,7 +210,10 @@ export default function DataTable() {
         {/* Quick Search Suggestion Pills */}
         <div className="flex items-center gap-2 flex-wrap text-xs">
           <span className="text-slate-400 font-semibold text-[11px]">Hızlı Aramalar:</span>
-          {['Yazılım Mühendisliği', 'Tıp', 'Hukuk', 'Mimarlık', 'Bilgisayar Mühendisliği', 'Psikoloji', 'Hemşirelik'].map((tag) => (
+          {(defaultDegree.includes('Önlisans')
+            ? ['Bilgisayar Programcılığı', 'İlk ve Acil Yardım', 'Adalet', 'Ağız ve Diş Sağlığı', 'Anestezi', 'Diyaliz', 'Uçak Teknolojisi']
+            : ['Yazılım Mühendisliği', 'Tıp', 'Hukuk', 'Mimarlık', 'Bilgisayar Mühendisliği', 'Psikoloji', 'Hemşirelik']
+          ).map((tag) => (
             <button
               key={tag}
               onClick={() => handleQuickSearch(tag)}
@@ -208,7 +224,7 @@ export default function DataTable() {
           ))}
         </div>
 
-        {/* Ranking Range Filter Bar (NEW FEATURE) */}
+        {/* Ranking Range Filter Bar */}
         <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-200 space-y-3">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-xs font-extrabold text-slate-900">
@@ -238,10 +254,10 @@ export default function DataTable() {
                 50k – 100k
               </button>
               <button
-                onClick={() => handleRankPreset(100000, 200000)}
+                onClick={() => handleRankPreset(100000, 300000)}
                 className="bg-white border border-slate-200 text-slate-700 hover:border-blue-300 hover:text-blue-700 px-2.5 py-1 rounded-lg font-bold"
               >
-                100k – 200k
+                100k – 300k
               </button>
               {(minRank || maxRank) && (
                 <button
@@ -284,17 +300,39 @@ export default function DataTable() {
           </div>
         </div>
 
-        {/* Custom Multi-Select Dropdowns Grid with Search Box */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 pt-3 border-t border-slate-100 z-20">
+        {/* Custom Multi-Select Dropdowns Grid (Searchable Program Combobox + Special Quotas) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 pt-3 border-t border-slate-100 z-20">
+          {/* SEARCHABLE MULTI-SELECT PROGRAM COMBOBOX (User Request #1) */}
+          <MultiSelectDropdown
+            label="🎓 Program / Bölüm Adı (Çoklu Seçim)"
+            options={DEPARTMENTS_LIST}
+            selectedValues={selectedPrograms}
+            onChange={setSelectedPrograms}
+            placeholder="Bölüm adı yazın..."
+            allLabel="Tüm Bölümler"
+          />
+
+          {/* SPECIAL QUOTAS FILTER (User Request #2) */}
+          <MultiSelectDropdown
+            label="⭐ Özel Kontenjan Türü"
+            options={['Okul Birincisi Kontenjanı Olanlar', 'Şehit/Gazi Yakını Kontenjanı Olanlar', '34 Yaş Üstü Kadın Kontenjanı Olanlar', 'Depremzede Kontenjanı Olanlar']}
+            selectedValues={selectedSpecialQuotas}
+            onChange={setSelectedSpecialQuotas}
+            placeholder="Kontenjan türü süzün..."
+            allLabel="Tüm Kontenjanlar"
+          />
+
+          {/* Multi-Select Status Filter */}
           <MultiSelectDropdown
             label="📈 Durum Filtresi"
             options={['Kapatılanlar Hariç', 'Sadece Kapatılanlar (-100%)', 'Sadece Yeni Açılanlar (+100%)']}
             selectedValues={selectedStatuses}
             onChange={setSelectedStatuses}
             placeholder="Durum süzün..."
-            allLabel="Tüm Bölümler"
+            allLabel="Tüm Durumlar"
           />
 
+          {/* Multi-Select University Type Filter */}
           <MultiSelectDropdown
             label="🏫 Üniversite Türü"
             options={['Devlet', 'Vakıf', 'KKTC']}
@@ -304,6 +342,7 @@ export default function DataTable() {
             allLabel="Tüm Türler"
           />
 
+          {/* Multi-Select Score Type Filter */}
           <MultiSelectDropdown
             label="🎯 Puan Türü"
             options={['SAY', 'EA', 'SÖZ', 'DİL', 'TYT']}
@@ -313,15 +352,7 @@ export default function DataTable() {
             allLabel="Tüm Puanlar"
           />
 
-          <MultiSelectDropdown
-            label="🎓 Öğrenim Derecesi"
-            options={['Lisans (4+ Yıl)', 'Önlisans (2 Yıl)']}
-            selectedValues={selectedDegrees}
-            onChange={setSelectedDegrees}
-            placeholder="Derece arayın..."
-            allLabel="Tüm Dereceler"
-          />
-
+          {/* Multi-Select Searchable Cities Filter */}
           <MultiSelectDropdown
             label="🏙️ Şehir (İl - Çoklu Seçim)"
             options={CITIES_LIST}
@@ -333,16 +364,16 @@ export default function DataTable() {
         </div>
       </div>
 
-      {/* Summary KPI Ribbon */}
-      <div className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4 shadow-lg shadow-emerald-600/10">
+      {/* Summary KPI Ribbon (DATABASE-WIDE TOTAL AGGREGATED STATS - Solves User Request #4) */}
+      <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4 shadow-lg shadow-emerald-600/10">
         <div className="flex items-center gap-2.5 font-extrabold text-sm">
           <Sparkles className="w-5 h-5 text-emerald-200" />
-          <span>🎯 GÜNCEL (2026) KONTENJAN: {total2026.toLocaleString()}</span>
+          <span>🎯 GÜNCEL (2026) KONTENJAN: {dbSummary.total_quota_2026.toLocaleString()}</span>
         </div>
         <div className="flex items-center gap-6 text-xs font-semibold">
-          <span>2025 Kontenjanı: <strong>{total2025.toLocaleString()}</strong></span>
-          <span>Net Değişim: <strong>{netDiff >= 0 ? `+${netDiff.toLocaleString()}` : netDiff.toLocaleString()}</strong></span>
-          <span>Listelenen Kayıt: <strong>{filteredPrograms.length}</strong></span>
+          <span>2025 Kontenjanı: <strong>{dbSummary.total_quota_2025.toLocaleString()}</strong></span>
+          <span>Net Değişim: <strong>{dbSummary.net_diff >= 0 ? `+${dbSummary.net_diff.toLocaleString()}` : dbSummary.net_diff.toLocaleString()}</strong></span>
+          <span>Toplam Bölüm Sayısı: <strong>{dbSummary.matching_records.toLocaleString()}</strong></span>
         </div>
       </div>
 

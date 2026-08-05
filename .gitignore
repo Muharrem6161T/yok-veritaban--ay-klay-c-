@@ -1,8 +1,9 @@
 # Node / Frontend
 frontend/node_modules/
 
-# Local Git Tools
+# Local Git Tools & Temp Files
 git_tools/
+*.sqlite3-journal
 
 # Python / Django
 __pycache__/
