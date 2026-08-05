@@ -29,8 +29,8 @@ class DepartmentNamesView(APIView):
 
 class ProgramListView(APIView):
     """
-    Kapsamlı arama, çoklu bölüm seçimi, özel kontenjanlar, sıralama aralığı ve 
-    tüm veritabanı toplam metriklerini dönen Program Listesi Uç Noktası.
+    Kapsamlı arama, çoklu bölüm seçimi, Genel ve Meslek Lisesi kontenjanları, 
+    sıralama aralığı ve tüm veritabanı toplam metriklerini dönen Program Listesi Uç Noktası.
     """
     def get(self, request):
         queryset = Program.objects.select_related('university').prefetch_related('quota_records').all()
@@ -82,14 +82,19 @@ class ProgramListView(APIView):
             if deg_list:
                 queryset = queryset.filter(degree__in=deg_list)
 
-        # Special Quotas Filter (Okul Birincisi vb.)
+        # Quotas Filter (Genel, Okul Birincisi, Meslek Lisesi/MOKO vb.)
         special_quotas = request.GET.get('special_quotas', '')
         if special_quotas and special_quotas != 'Tümü':
             sq_list = [s.strip() for s in special_quotas.split(',') if s.strip() and s.strip() != 'Tümü']
             if sq_list:
                 sq_q = Q()
-                if any('Okul Birincisi' in s for s in sq_list):
-                    sq_q |= Q(quota_records__top_school_quota__gt=0)
+                for s in sq_list:
+                    if 'Genel' in s:
+                        sq_q |= Q(quota_records__general_quota__gt=0)
+                    if 'Okul Birincisi' in s:
+                        sq_q |= Q(quota_records__top_school_quota__gt=0)
+                    if 'Meslek Lisesi' in s or 'MEB' in s or 'MOKO' in s:
+                        sq_q |= Q(quota_records__meb_quota__gt=0)
                 queryset = queryset.filter(sq_q)
 
         # Ranking Range Filter (e.g. 50.000 - 100.000)

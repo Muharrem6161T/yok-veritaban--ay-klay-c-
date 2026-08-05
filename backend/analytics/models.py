@@ -45,6 +45,7 @@ class QuotaRecord(models.Model):
     year = models.IntegerField(verbose_name="Yıl")
     general_quota = models.IntegerField(default=0, verbose_name="Genel Kontenjan")
     top_school_quota = models.IntegerField(default=0, verbose_name="Okul Birincisi Kontenjanı")
+    meb_quota = models.IntegerField(default=0, verbose_name="MEB / Meslek Lisesi Kontenjanı")
     total_quota = models.IntegerField(default=0, verbose_name="Toplam Kontenjan")
     min_score = models.FloatField(null=True, blank=True, verbose_name="En Düşük Puan")
     min_ranking = models.IntegerField(null=True, blank=True, verbose_name="En Düşük Sıralama")

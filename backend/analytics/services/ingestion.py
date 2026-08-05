@@ -43,19 +43,12 @@ def clean_dept_name(name):
     return cleaned if cleaned else str(name)
 
 def ingest_excel_file(file_path, year, default_degree=None):
-    """
-    ÖSYM Tablo-4 (Lisans) ve Tablo-3 (Önlisans) Excel dosyalarını veritabanına aktarır.
-    DİKKAT: Yılı Y olan Excel dosyasındaki Sıralama aslında Y-1 yılında yerleşen son kişinin sıralamasıdır!
-    """
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"Excel dosyası bulunamadı: {file_path}")
 
     df = pd.read_excel(file_path, header=None)
 
-    # Program Kodu Kontrolü (Sütun 0'da sayısal kod)
     is_program_code = pd.to_numeric(df[0], errors='coerce').notna()
-
-    # Üniversite Başlık Satırı
     is_uni_header = (~is_program_code) & df[1].astype(str).str.contains('ÜNİVERSİTESİ', case=False, na=False)
 
     df['UNIVERSTE_ADI'] = np.where(is_uni_header, df[1], np.nan)
@@ -65,7 +58,6 @@ def ingest_excel_file(file_path, year, default_degree=None):
     if df_bolumler.empty:
         return 0, 0
 
-    # Sıralama ve Puan sütunlarını dinamik tespit et
     sample_row = df_bolumler.iloc[0]
     rank_col = None
     score_col = None
@@ -101,9 +93,11 @@ def ingest_excel_file(file_path, year, default_degree=None):
         okul_birincisi = pd.to_numeric(row.iloc[5], errors='coerce') if len(row) > 5 else 0
         okul_birincisi = int(okul_birincisi) if pd.notna(okul_birincisi) else 0
 
-        tot_kont = genel_kont + okul_birincisi
+        meb_kont = pd.to_numeric(row.iloc[6], errors='coerce') if len(row) > 6 else 0
+        meb_kont = int(meb_kont) if pd.notna(meb_kont) else 0
 
-        # Sıralama ve Puan (Bir önceki yıla ait)
+        tot_kont = genel_kont + okul_birincisi + meb_kont
+
         rank_val = None
         score_val = None
         if rank_col is not None and rank_col < len(row):
@@ -116,7 +110,6 @@ def ingest_excel_file(file_path, year, default_degree=None):
             if pd.notna(sv) and sv > 0:
                 score_val = float(sv)
 
-        # Üniversiteyi Al / Oluştur
         city = detect_city(uni_name)
         uni_type = detect_uni_type(uni_name)
 
@@ -128,7 +121,6 @@ def ingest_excel_file(file_path, year, default_degree=None):
         degree = "Önlisans (2 Yıl)" if duration <= 2 else "Lisans (4+ Yıl)"
         clean_name = clean_dept_name(prog_name)
 
-        # Programı Al / Oluştur
         program_obj, _ = Program.objects.get_or_create(
             code=prog_code,
             defaults={
@@ -141,20 +133,19 @@ def ingest_excel_file(file_path, year, default_degree=None):
             }
         )
 
-        # Mevcut Yıl (year) Kontenjan Kaydını Güncelle
         rec_obj, created = QuotaRecord.objects.update_or_create(
             program=program_obj,
             year=year,
             defaults={
                 'general_quota': genel_kont,
                 'top_school_quota': okul_birincisi,
+                'meb_quota': meb_kont,
                 'total_quota': tot_kont,
                 'is_closed': False,
                 'is_new': False
             }
         )
 
-        # Bir Önceki Yıl (prev_year) Gerçekleşen Sıralama ve Puan Kaydını Güncelle
         if rank_val or score_val:
             prev_rec, _ = QuotaRecord.objects.get_or_create(
                 program=program_obj,

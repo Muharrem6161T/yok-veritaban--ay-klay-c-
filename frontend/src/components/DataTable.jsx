@@ -309,7 +309,7 @@ export default function DataTable({ defaultDegree = 'Lisans (4+ Yıl)', title = 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 pt-3 border-t border-slate-100 z-20">
           {/* SEARCHABLE MULTI-SELECT PROGRAM COMBOBOX */}
           <MultiSelectDropdown
-            label={`🎓 Program / Bölüm`}
+            label="🎓 Program / Bölüm"
             options={allDepartmentNames}
             selectedValues={selectedPrograms}
             onChange={setSelectedPrograms}
@@ -317,13 +317,20 @@ export default function DataTable({ defaultDegree = 'Lisans (4+ Yıl)', title = 
             allLabel="Tüm Bölümler"
           />
 
-          {/* SPECIAL QUOTAS FILTER */}
+          {/* GENERAL & SPECIAL QUOTAS FILTER */}
           <MultiSelectDropdown
-            label="⭐ Özel Kontenjan"
-            options={['Okul Birincisi Kontenjanı Olanlar', 'Şehit/Gazi Yakını Kontenjanı Olanlar', '34 Yaş Üstü Kadın Kontenjanı Olanlar', 'Depremzede Kontenjanı Olanlar']}
+            label="⭐ Kontenjan Türü"
+            options={[
+              'Genel Kontenjan',
+              'Meslek Lisesi / MOKO Kontenjanı',
+              'Okul Birincisi Kontenjanı',
+              'Şehit/Gazi Yakını Kontenjanı',
+              '34 Yaş Üstü Kadın Kontenjanı',
+              'Depremzede Kontenjanı'
+            ]}
             selectedValues={selectedSpecialQuotas}
             onChange={setSelectedSpecialQuotas}
-            placeholder="Kontenjan türü süzün..."
+            placeholder="Kontenjan süzün..."
             allLabel="Tüm Kontenjanlar"
           />
 
